@@ -28,7 +28,7 @@
 #include "3rdparty/stb/stb_truetype.h"
 #include "common/shader_cache.h"
 #include "data/glsl_shaders.h"
-#include "driver/shaders/spirv/spirv_common.h"
+#include "driver/shaders/spirv/spirv_compile.h"
 #include "maths/camera.h"
 #include "maths/formatpacking.h"
 #include "maths/matrix.h"

@@ -28,7 +28,9 @@
 #include "common/common.h"
 #include "maths/formatpacking.h"
 #include "serialise/serialiser.h"
+#include "serialise/string_utils.h"
 #include "spirv_common.h"
+#include "spirv_compile.h"
 
 using std::pair;
 using std::make_pair;
@@ -3917,6 +3919,8 @@ void SPVModule::MakeReflection(ShaderStage stage, const string &entryPoint,
     }
   }
 
+  reflection.DebugInfo.compileFlags = compileFlags;
+
   // TODO need to fetch these
   reflection.DispatchThreadsDimension[0] = 0;
   reflection.DispatchThreadsDimension[1] = 0;
@@ -4493,6 +4497,110 @@ void SPVModule::MakeReflection(ShaderStage stage, const string &entryPoint,
   }
 }
 
+void AddModuleProcess(SPIRVCompilationSettings &settings, std::string process)
+{
+  // short-cut handling for definitions as they're handled specially
+  if(process[0] == 'D' || process[0] == 'U')
+  {
+    const char *command = (process[0] == 'D') ? "#define" : "#undef";
+    process.erase(0, 1);
+
+    size_t equals = process.find('=');
+
+    if(equals != std::string::npos)
+      process[equals] = ' ';
+
+    settings.definitionPreamble += StringFormat::Fmt("%s %s\n", command, process.c_str());
+    return;
+  }
+
+  size_t space = process.find(' ');
+
+  if(space != std::string::npos)
+  {
+    std::string key = process.substr(0, space);
+    std::string value = process.substr(space + 1);
+
+    if(key == "entry-point")
+    {
+      settings.entryPoint = value;
+    }
+    else if(key == "resource-set-binding")
+    {
+      split(value, settings.resourceSetBinding, ' ');
+    }
+    else if(key == "source-entrypoint")
+    {
+      settings.sourceEntryPoint = value;
+    }
+    else if(key == "client")
+    {
+      if(value == "vulkan100")
+        settings.vulkanVersion = 100;
+      else if(value == "opengl100")
+        settings.openglVersion = 100;
+      else
+        RDCWARN("Unexpected 'client' module process value '%s'", value.c_str());
+    }
+    else if(key == "target-env")
+    {
+      if(value == "vulkan1.0")
+        settings.vulkanVersion = 100;
+      else if(value == "vulkanUnknown")
+        settings.vulkanVersion = 100;
+      else if(value == "opengl")
+        settings.openglVersion = 450;
+      else
+        RDCWARN("Unexpected 'target-env' module process value '%s'", value.c_str());
+    }
+    else
+    {
+      RDCWARN("Unexpected '%s' module process", key.c_str());
+    }
+  }
+  else
+  {
+    std::string &key = process;
+
+    if(key == "bar")
+    {
+      settings.entryPoint = "bar";
+    }
+    else if(key == "auto-map-bindings")
+    {
+      settings.autoMapBindings = true;
+    }
+    else if(key == "auto-map-locations")
+    {
+      settings.autoMapLocations = true;
+    }
+    else if(key == "flatten-uniform-arrays")
+    {
+      settings.flattenUniformArrays = true;
+    }
+    else if(key == "no-storage-format")
+    {
+      settings.noStorageFormat = true;
+    }
+    else if(key == "hlsl-offsets")
+    {
+      settings.hlslOffsets = true;
+    }
+    else if(key == "use-storage-buffer")
+    {
+      settings.useStorageBuffer = true;
+    }
+    else if(key == "hlsl-iomap")
+    {
+      settings.hlslIoMapping = true;
+    }
+    else
+    {
+      RDCWARN("Unexpected '%s' module process", key.c_str());
+    }
+  }
+}
+
 void ParseSPIRV(uint32_t *spirv, size_t spirvLength, SPVModule &module)
 {
   if(spirv[0] != (uint32_t)spv::MagicNumber)
@@ -4508,6 +4616,10 @@ void ParseSPIRV(uint32_t *spirv, size_t spirvLength, SPVModule &module)
     RDCERR("Unsupported SPIR-V version: %08x", spirv[1]);
     return;
   }
+
+  SPIRVCompilationSettings settings;
+
+  settings.spvVersion = packedVersion;
 
   // Bytes: 0 | major | minor | 0
   module.moduleVersion.major = uint8_t((packedVersion & 0x00ff0000) >> 16);
@@ -4546,6 +4658,17 @@ void ParseSPIRV(uint32_t *spirv, size_t spirvLength, SPVModule &module)
         module.sourceLang = spv::SourceLanguage(spirv[it + 1]);
         module.sourceVer = spirv[it + 2];
 
+        switch(module.sourceLang)
+        {
+          case spv::SourceLanguageUnknown:
+          case spv::SourceLanguageMax: settings.lang = SPIRVSourceLanguage::Unknown; break;
+          case spv::SourceLanguageESSL:
+          case spv::SourceLanguageOpenCL_C:
+          case spv::SourceLanguageOpenCL_CPP: settings.lang = SPIRVSourceLanguage::Unknown; break;
+          case spv::SourceLanguageGLSL: settings.lang = SPIRVSourceLanguage::VulkanGLSL; break;
+          case spv::SourceLanguageHLSL: settings.lang = SPIRVSourceLanguage::VulkanHLSL; break;
+        }
+
         if(WordCount > 4)
         {
           std::pair<string, string> sourceFile;
@@ -4554,7 +4677,45 @@ void ParseSPIRV(uint32_t *spirv, size_t spirvLength, SPVModule &module)
           RDCASSERT(filenameInst);
 
           sourceFile.first = filenameInst->str;
-          sourceFile.second = (const char *)&spirv[it + 4];
+
+          std::string source = (const char *)&spirv[it + 4];
+
+          const char compileFlagPrefix[] = "// OpModuleProcessed ";
+          const char endMarker[] = "#line 1\n";
+          if(source.find(compileFlagPrefix) == 0)
+          {
+            // process compile flags
+            size_t nextLine = source.find('\n');
+            while(nextLine != std::string::npos)
+            {
+              bool finished = false;
+              if(source.find(compileFlagPrefix) == 0)
+              {
+                size_t offs = sizeof(compileFlagPrefix) - 1;
+                AddModuleProcess(settings, source.substr(offs, nextLine - offs));
+              }
+              else if(source.find(endMarker) == 0)
+              {
+                finished = true;
+              }
+              else
+              {
+                RDCERR("Unexpected preamble line with OpModuleProcessed: %s",
+                       std::string(source.begin(), source.begin() + nextLine));
+                break;
+              }
+
+              // erase this line
+              source.erase(0, nextLine + 1);
+
+              nextLine = source.find('\n');
+
+              if(finished)
+                break;
+            }
+          }
+
+          sourceFile.second = source;
 
           module.sourceFiles.push_back(sourceFile);
         }
@@ -4585,6 +4746,14 @@ void ParseSPIRV(uint32_t *spirv, size_t spirvLength, SPVModule &module)
         module.sourceexts.push_back(&op);
         break;
       }
+// when SPIR-V 1.1 rolls around
+#if SPV_VERSION >= 0x10100
+      case spv::OpModuleProcessed:
+      {
+        AddModuleProcess(settings, (const char *)&spirv[it + 1]);
+        break;
+      }
+#endif
       case spv::OpExtension:
       {
         string ext = (const char *)&spirv[it + 1];
@@ -6085,6 +6254,8 @@ void ParseSPIRV(uint32_t *spirv, size_t spirvLength, SPVModule &module)
   };
 
   std::sort(module.globals.begin(), module.globals.end(), SortByVarClass());
+
+  module.compileFlags = EncodeSPIRVSettings(settings);
 }
 
 template <>

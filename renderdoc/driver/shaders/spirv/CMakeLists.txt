@@ -89,9 +89,9 @@ if(UNIX)
 endif()
 
 set(sources
-    spirv_common.cpp
     spirv_common.h
     spirv_compile.cpp
+    spirv_compile.h
     spirv_disassemble.cpp
     ${glslang_sources})
 

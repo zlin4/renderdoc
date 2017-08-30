@@ -107,7 +107,6 @@
     </ClCompile>
     <ClCompile Include="spirv_compile.cpp" />
     <ClCompile Include="spirv_disassemble.cpp" />
-    <ClCompile Include="spirv_common.cpp" />
     <ClCompile Include="..\..\..\3rdparty\glslang\hlsl\hlslGrammar.cpp">
       <Filter>3rdparty\glslang</Filter>
     </ClCompile>
@@ -300,5 +299,6 @@
     <ClInclude Include="precompiled.h">
       <Filter>PCH</Filter>
     </ClInclude>
+    <ClInclude Include="spirv_compile.h" />
   </ItemGroup>
 </Project>

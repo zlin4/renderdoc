@@ -29,41 +29,10 @@
 #include <utility>
 #include <vector>
 #include "3rdparty/glslang/SPIRV/spirv.hpp"
+#include "api/replay/renderdoc_replay.h"
 
 using std::string;
 using std::vector;
-
-enum class SPIRVShaderStage
-{
-  Vertex,
-  TessControl,
-  TessEvaluation,
-  Geometry,
-  Fragment,
-  Compute,
-  Invalid,
-};
-
-enum class SPIRVSourceLanguage
-{
-  Unknown,
-  OpenGLGLSL,
-  VulkanGLSL,
-  VulkanHLSL,
-};
-
-struct SPIRVCompilationSettings
-{
-  SPIRVCompilationSettings(SPIRVSourceLanguage l, SPIRVShaderStage s) : stage(s), lang(l) {}
-  SPIRVCompilationSettings() = default;
-
-  SPIRVShaderStage stage = SPIRVShaderStage::Invalid;
-  SPIRVSourceLanguage lang = SPIRVSourceLanguage::Unknown;
-  std::string entryPoint;
-};
-
-void InitSPIRVCompiler();
-void ShutdownSPIRVCompiler();
 
 struct SPVInstruction;
 
@@ -105,6 +74,7 @@ struct SPVModule
   spv::SourceLanguage sourceLang;
   uint32_t sourceVer;
 
+  ShaderCompileFlags compileFlags;
   vector<std::pair<string, string>> sourceFiles;
 
   vector<string> extensions;
@@ -132,6 +102,4 @@ struct SPVModule
                       ShaderBindpointMapping &mapping, SPIRVPatchData &patchData);
 };
 
-string CompileSPIRV(const SPIRVCompilationSettings &settings, const vector<string> &sources,
-                    vector<uint32_t> &spirv);
 void ParseSPIRV(uint32_t *spirv, size_t spirvLength, SPVModule &module);

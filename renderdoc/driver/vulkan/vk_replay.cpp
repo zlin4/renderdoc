@@ -25,6 +25,7 @@
 #include "vk_replay.h"
 #include <float.h>
 #include "driver/ihv/amd/amd_isa.h"
+#include "driver/shaders/spirv/spirv_compile.h"
 #include "maths/camera.h"
 #include "maths/matrix.h"
 #include "serialise/string_utils.h"
@@ -5073,7 +5074,15 @@ void VulkanReplay::BuildCustomShader(string source, string entry,
   sources.push_back(source);
   vector<uint32_t> spirv;
 
-  SPIRVCompilationSettings settings(SPIRVSourceLanguage::VulkanGLSL, stage);
+  SPIRVCompilationSettings settings = DecodeSPIRVSettings(compileFlags);
+
+  if(settings.lang == SPIRVSourceLanguage::Unknown)
+    settings.lang = SPIRVSourceLanguage::VulkanGLSL;
+
+  if(settings.entryPoint.empty())
+    settings.entryPoint = "main";
+
+  settings.stage = stage;
 
   string output = CompileSPIRV(settings, sources, spirv);
 
@@ -5187,7 +5196,13 @@ void VulkanReplay::BuildTargetShader(string source, string entry,
   sources.push_back(source);
   vector<uint32_t> spirv;
 
-  SPIRVCompilationSettings settings(SPIRVSourceLanguage::VulkanGLSL, stage);
+  SPIRVCompilationSettings settings = DecodeSPIRVSettings(compileFlags);
+
+  if(settings.lang == SPIRVSourceLanguage::Unknown)
+    settings.lang = SPIRVSourceLanguage::VulkanGLSL;
+
+  settings.entryPoint = entry;
+  settings.stage = stage;
 
   string output = CompileSPIRV(settings, sources, spirv);
 

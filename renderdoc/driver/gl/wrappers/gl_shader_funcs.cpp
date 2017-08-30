@@ -26,7 +26,7 @@
 #include "../gl_driver.h"
 #include "../gl_shader_refl.h"
 #include "common/common.h"
-#include "driver/shaders/spirv/spirv_common.h"
+#include "driver/shaders/spirv/spirv_compile.h"
 #include "serialise/string_utils.h"
 
 void WrappedOpenGL::ShaderData::Compile(WrappedOpenGL &gl, ResourceId id)
@@ -73,8 +73,11 @@ void WrappedOpenGL::ShaderData::Compile(WrappedOpenGL &gl, ResourceId id)
 
     vector<uint32_t> spirvwords;
 
-    SPIRVCompilationSettings settings(SPIRVSourceLanguage::OpenGLGLSL,
-                                      SPIRVShaderStage(ShaderIdx(type)));
+    SPIRVCompilationSettings settings;
+
+    settings.lang = SPIRVSourceLanguage::OpenGLGLSL;
+    settings.entryPoint = "main";
+    settings.stage = SPIRVShaderStage(ShaderIdx(type));
 
     string s = CompileSPIRV(settings, sources, spirvwords);
     if(!spirvwords.empty())
