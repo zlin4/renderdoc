@@ -3645,6 +3645,70 @@ namespace renderdocui.Windows
 
         private TextureSaveDialog m_SaveDialog = null;
 
+        public void saveTex_auto(string FileName)
+        {
+            //FetchDrawcall draw = m_Core.CurDrawcall;
+
+            if (CurrentTexture == null)
+                return;
+
+            if (m_SaveDialog == null)
+                m_SaveDialog = new TextureSaveDialog(m_Core);
+
+            m_SaveDialog.saveData.id = m_TexDisplay.texid;
+            m_SaveDialog.saveData.typeHint = m_TexDisplay.typeHint;
+            m_SaveDialog.saveData.slice.sliceIndex = (int)m_TexDisplay.sliceFace;
+            m_SaveDialog.saveData.mip = (int)m_TexDisplay.mip;
+
+            if (CurrentTexture != null && CurrentTexture.depth > 1)
+                m_SaveDialog.saveData.slice.sliceIndex = (int)m_TexDisplay.sliceFace >> (int)m_TexDisplay.mip;
+
+            m_SaveDialog.saveData.channelExtract = -1;
+            if (m_TexDisplay.Red && !m_TexDisplay.Green && !m_TexDisplay.Blue && !m_TexDisplay.Alpha)
+                m_SaveDialog.saveData.channelExtract = 0;
+            if (!m_TexDisplay.Red && m_TexDisplay.Green && !m_TexDisplay.Blue && !m_TexDisplay.Alpha)
+                m_SaveDialog.saveData.channelExtract = 1;
+            if (!m_TexDisplay.Red && !m_TexDisplay.Green && m_TexDisplay.Blue && !m_TexDisplay.Alpha)
+                m_SaveDialog.saveData.channelExtract = 2;
+            if (!m_TexDisplay.Red && !m_TexDisplay.Green && !m_TexDisplay.Blue && m_TexDisplay.Alpha)
+                m_SaveDialog.saveData.channelExtract = 3;
+
+            m_SaveDialog.saveData.comp.blackPoint = m_TexDisplay.rangemin;
+            m_SaveDialog.saveData.comp.whitePoint = m_TexDisplay.rangemax;
+            m_SaveDialog.saveData.alphaCol = m_TexDisplay.lightBackgroundColour;
+            m_SaveDialog.saveData.alpha = m_TexDisplay.Alpha ? AlphaMapping.Preserve : AlphaMapping.Discard;
+            if (m_TexDisplay.Alpha && !checkerBack.Checked) m_SaveDialog.saveData.alpha = AlphaMapping.BlendToColour;
+            m_SaveDialog.tex = CurrentTexture;
+
+            if (m_TexDisplay.CustomShader != ResourceId.Null)
+            {
+                m_Core.Renderer.Invoke((ReplayRenderer r) =>
+                {
+                    ResourceId id = m_Output.GetCustomShaderTexID();
+                    if (id != ResourceId.Null)
+                        m_SaveDialog.saveData.id = id;
+                });
+            }
+
+            //if (m_SaveDialog.ShowDialog() == DialogResult.OK)
+            //{
+            m_SaveDialog.saveData.destType = FileType.PNG;
+
+            bool ret = false;
+
+            m_Core.Renderer.Invoke((ReplayRenderer r) =>
+            {
+                //ret = r.SaveTexture(m_SaveDialog.saveData, m_SaveDialog.Filename);
+                ret = r.SaveTexture(m_SaveDialog.saveData, FileName);
+            });
+
+            if (!ret)
+                MessageBox.Show(string.Format("Error saving texture {0}.\n\nCheck diagnostic log in Help menu for more details.", m_SaveDialog.Filename),
+                                   "Error saving texture", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            //}
+        }
+
+
         private void saveTex_Click(object sender, EventArgs e)
         {
             if(CurrentTexture == null)

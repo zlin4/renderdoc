@@ -1345,6 +1345,32 @@ namespace renderdocui.Windows
 
         private void export_Click(object sender, EventArgs e)
         {
+            // Zhen: reuse export button to dump per-draw images in batch.
+            FetchDrawcall draw = m_Core.CurDrawcall;
+            if (draw != null && draw.eventID == 1)
+            {
+                FetchDrawcall d = m_Core.CurDrawcall;
+                string path = Directory.GetParent(Environment.GetFolderPath(Environment.SpecialFolder.Desktop)).FullName;
+                path += "\\Desktop\\RenderDocPerDrawImages\\";
+                Directory.CreateDirectory(path);
+                while (true)
+                {
+                    string FileName = path + d.drawcallID + ".png";
+                    m_Core.GetTextureViewer().saveTex_auto(FileName);
+                    if (d.next != null)
+                    {
+                        SelectEvent(d.next.eventID);
+                        d = m_Core.CurDrawcall;
+                    }
+                    else
+                    {
+                        break;
+                    }
+                }
+
+                return;
+            }
+
             DialogResult res = exportDialog.ShowDialog();
 
             if (res == DialogResult.OK)
